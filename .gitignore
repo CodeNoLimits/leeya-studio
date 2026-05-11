@@ -1,0 +1,26 @@
+# Build outputs (rebuilt by pack.sh)
+build/Leeya Studio.app/
+build/Leeya Studio.zip
+build/release/Leeya-Studio-v1.0/
+*.zip
+
+# Vendor (heavy assets — bundled at build time, not source)
+vendor/python/
+vendor/python-runtime.tar.gz
+vendor/site-packages/
+vendor/ffmpeg
+vendor/whisper-cli
+vendor/ggml-tiny.bin
+vendor/client_secret.json
+
+# OS / IDE
+.DS_Store
+*.swp
+*.swo
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+
+# Local checkpoint files
+CHECKPOINT.md
