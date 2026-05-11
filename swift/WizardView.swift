@@ -24,12 +24,14 @@ struct WizardView: View {
 
     enum GoogleStatus { case notSignedIn, inProgress, signedIn, failed }
 
-    /// David's pre-shared Gemini key — written to Leeya's Keychain only when she clicks "Use David's key".
-    /// Never embedded in a public-facing settings file.
-    private let davidGemini = "AIzaSyA1iOmr0qPpUjprw86w_Z8JXY3f-erN4HY"
-    /// David's ElevenLabs sub-account key — same rule, opt-in only.
-    private let davidElevenLabs = "sk_46988e9cd23220c74c6355119f37655cfcbab776f6e57a29"
+    /// David's shared keys are NOT embedded in this binary or source.
+    /// The "Use David's key" buttons fetch them at runtime from the
+    /// authenticated bridge endpoint, so we can rotate without rebuilding.
+    private let bridgeBase = "https://leeya-studio-bridge.vercel.app"
     private let leeyaVoiceId = "uu373LLRwhL27vnWt98R"
+
+    @State private var fetchingDavidKey = false
+    @State private var fetchingElevenKey = false
 
     var body: some View {
         ScrollView {
@@ -136,8 +138,11 @@ struct WizardView: View {
                     .help("הצגת/הסתרת המפתח")
             }
             HStack(spacing: 10) {
-                Button("Use David's key") { geminiKey = davidGemini ; geminiTestResult = .untested }
-                    .buttonStyle(.bordered)
+                Button(fetchingDavidKey ? "טוענת…" : "Use David's key") {
+                    fetchDavidKey(kind: "gemini")
+                }
+                .buttonStyle(.bordered)
+                .disabled(fetchingDavidKey)
                 Button(geminiTestResult == .testing ? "בודקת…" : "בדיקה · Test") { testGeminiKey() }
                     .buttonStyle(.bordered)
                     .disabled(geminiKey.isEmpty || geminiTestResult == .testing)
@@ -150,6 +155,33 @@ struct WizardView: View {
             case .ok:       Text("✅ מפתח עובד · ready").font(.system(size: 11)).foregroundColor(.green)
             case .quota:    Text("⚠️ הגעת למכסה היומית. נסי מחר או צרי מפתח חדש").font(.system(size: 11)).foregroundColor(.orange)
             case .badKey:   Text("❌ מפתח לא תקין").font(.system(size: 11)).foregroundColor(.red)
+            }
+        }
+    }
+
+    private func fetchDavidKey(kind: String) {
+        if kind == "gemini" { fetchingDavidKey = true } else { fetchingElevenKey = true }
+        let endpoint = "\(bridgeBase)/api/david-key?kind=\(kind)"
+        Task.detached {
+            let url = URL(string: endpoint)!
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let key = (json?["key"] as? String) ?? ""
+                await MainActor.run {
+                    if kind == "gemini" {
+                        geminiKey = key
+                        geminiTestResult = .untested
+                        fetchingDavidKey = false
+                    } else {
+                        elevenLabsKey = key
+                        fetchingElevenKey = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    if kind == "gemini" { fetchingDavidKey = false } else { fetchingElevenKey = false }
+                }
             }
         }
     }
@@ -199,8 +231,11 @@ struct WizardView: View {
                 }
             }
             HStack(spacing: 10) {
-                Button("Use David's key (קול שלך משובט)") { elevenLabsKey = davidElevenLabs }
-                    .buttonStyle(.bordered)
+                Button(fetchingElevenKey ? "טוענת…" : "Use David's key (קול שלך משובט)") {
+                    fetchDavidKey(kind: "elevenlabs")
+                }
+                .buttonStyle(.bordered)
+                .disabled(fetchingElevenKey)
                 Button("דלגי") { elevenLabsKey = "" }
                     .buttonStyle(.bordered)
                 Link("elevenlabs.io →", destination: URL(string: "https://elevenlabs.io/app/settings/api-keys")!)
